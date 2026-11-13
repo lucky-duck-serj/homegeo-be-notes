@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Правки be коротко</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500&family=IBM+Plex+Sans+Condensed:wght@700&family=IBM+Plex+Sans:wght@400;600&display=swap" rel="stylesheet">
+<style>
+:root {
+  /* Layout: one narrow column, each decision as decision, alternatives, risks and pluses side by side. */
+  --paper: #f5f7f9;
+  --surface: #ffffff;
+  --ink: #17212c;
+  --muted: #5b6676;
+  --line: #d6dde5;
+  --accent: #1d5ea8;
+  --band: #edf1f5;
+  --bad: #b42318;
+  --ok: #1c7444;
+  --font-display: "IBM Plex Sans Condensed", "Arial Narrow", system-ui, sans-serif;
+  --font-body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #0e1318; --surface: #151c24; --ink: #e5eaf0; --muted: #9ba7b5; --line: #2b3542;
+    --accent: #72a9ea; --band: #121921; --bad: #f08074; --ok: #63c48e;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --paper: #0e1318; --surface: #151c24; --ink: #e5eaf0; --muted: #9ba7b5; --line: #2b3542;
+  --accent: #72a9ea; --band: #121921; --bad: #f08074; --ok: #63c48e;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--paper); color: var(--ink); font: 16px/1.55 var(--font-body); -webkit-text-size-adjust: 100%; }
+a { color: var(--accent); }
+a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 3px; }
+code { font-family: var(--font-mono); font-size: 0.85em; background: var(--band); padding: 0.05em 0.3em; border-radius: 3px; overflow-wrap: anywhere; }
+main { max-width: 900px; margin: 0 auto; padding: 36px 16px 64px; }
+h1, h2 { font-family: var(--font-display); font-weight: 700; line-height: 1.2; text-wrap: balance; margin: 0; }
+h1 { font-size: clamp(28px, 5vw, 38px); }
+h2 { font-size: 24px; margin-top: 44px; padding-top: 12px; border-top: 2px solid var(--ink); display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; }
+h2 .n { font: 500 14px var(--font-mono); color: var(--accent); }
+.lede { margin: 10px 0 0; max-width: 66ch; color: var(--muted); }
+.flow { margin-top: 18px; padding: 12px 16px; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; font-size: 15px; }
+.flow b { font-weight: 600; }
+.decision { margin-top: 14px; padding: 14px 18px; background: var(--surface); border-left: 4px solid var(--accent); border-radius: 0 8px 8px 0; }
+.decision p { margin: 0; }
+.decision p + p { margin-top: 8px; }
+.label { font: 500 12px var(--font-mono); text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); margin: 18px 0 6px; }
+.tbl { overflow-x: auto; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); }
+table { border-collapse: collapse; width: 100%; font-size: 15px; }
+th, td { text-align: left; vertical-align: top; padding: 8px 12px; border-bottom: 1px solid var(--line); }
+th { background: var(--band); font-size: 13px; font-weight: 600; }
+td:first-child { font-weight: 600; width: 34%; }
+tr:last-child td { border-bottom: 0; }
+.two { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 14px; margin-top: 18px; }
+.box { background: var(--surface); border: 1px solid var(--line); border-top: 4px solid var(--bad); border-radius: 8px; padding: 12px 16px; }
+.box.plus { border-top-color: var(--ok); }
+.box h3 { margin: 0 0 6px; font-size: 16px; font-weight: 600; }
+.box ul { margin: 0; padding-left: 18px; }
+.box li { margin: 6px 0; font-size: 15px; }
+footer { margin-top: 44px; font-size: 14px; color: var(--muted); }
+</style>
+</head>
+<body>
+<main>
+<h1>Две правки be коротко</h1>
+<p class="lede">Какое решение принято и почему, какие были альтернативы, риски и плюсы. Подробности, механика и вопросы к команде be в <a href="./">полной памятке</a>. Состояние на 13.11.2026: обе правки реализованы и покрыты тестами, не выложены, ждут ревью команды be.</p>
+
+<div class="flow"><b>Общая картина.</b> Запись в be → строка журнала в той же транзакции → адаптер опрашивает журнал и пересобирает объект → лента каталога → каждая копия сайта пишет её в свою SQLite (витрину) → страницы. От правки в админке до страницы обычно 5-10 с; сайт отвечает по витрине, даже когда be и адаптер лежат.</div>
+
+<h2><span class="n">1</span> Журнал изменений каталога</h2>
+<div class="decision">
+  <p><b>Решение.</b> Триггеры на 21 таблице каталога be в той же транзакции пишут в журнал строку «таблица, ID строки, операция, объект, ID транзакции», без значений. Адаптер опрашивает журнал раз в несколько секунд ролью только для чтения, видящей разрешённый список столбцов. Журнал хранится 7 дней.</p>
+  <p><b>Почему.</b> Сегодня у be нет надёжного сигнала: <code>updated_at</code> не двигается массовым <code>update()</code> и SQL руками, цена живёт в строках партнёров, фото и переводы в своих таблицах, удаление следа не оставляет. Триггер видит все пути записи, а be при этом никого не вызывает.</p>
+</div>
+
+<div class="label">Альтернативы</div>
+<div class="tbl"><table>
+  <thead><tr><th>Вариант</th><th>Почему нет</th></tr></thead>
+  <tbody>
+    <tr><td>Опрашивать <code>updated_at</code></td><td>Не видит массовых правок, SQL руками, партнёров, фото, переводов и удалений</td></tr>
+    <tr><td>Сигналы Django или HTTP-вызов из be</td><td>Не видят массовых операций, теряются, пока адаптер лежит; be пришлось бы вызывать платформу</td></tr>
+    <tr><td>Outbox в коде Python</td><td>О нём должен помнить каждый пишущий; массовые действия админки и миграции не вспомнят</td></tr>
+    <tr><td>Логическая репликация, Debezium</td><td>Слот и настройка сервера, риск для WAL без читателя, отдаёт целые строки с телефонами собственников</td></tr>
+    <tr><td>Уведомления <code>NOTIFY</code></td><td>Очередь общая на сервер: при переполнении падают фиксации у пишущих be. Выигрыш в секундах не нужен, страницы кэшируются на 5 с</td></tr>
+    <tr><td>Читать по <code>id &gt; позиции</code></td><td>Теряет поздно зафиксированные транзакции; читаем по паре «ID транзакции, ID строки» ниже горизонта</td></tr>
+  </tbody>
+</table></div>
+
+<div class="two">
+  <div class="box">
+    <h3>Риски</h3>
+    <ul>
+      <li>Одна долгая пишущая транзакция на сервере PostgreSQL, даже в соседней базе, останавливает ленту. Ничего не теряется, но сайт отстаёт.</li>
+      <li>После восстановления базы be на новый сервер адаптер перестаёт видеть изменения, если не сверяет позицию с <code>pg_snapshot_xmax</code>. В design адаптера этой проверки пока нет.</li>
+      <li>Адаптер читает столбцы be по именам: миграция be с переименованием сломает его молча. Нужна договорённость с командой be.</li>
+      <li>Массовые запросы примерно вдвое медленнее (100 000 объектов: 1,7 с против 0,85 с); упавшая вставка в журнал роняет и саму запись.</li>
+      <li>Запись мимо триггера (<code>DISABLE TRIGGER</code>, загрузка дампа) ловит только часовая сверка.</li>
+      <li>Тяжёлое обслуживание таблицы журнала (<code>VACUUM FULL</code>, индекс без <code>CONCURRENTLY</code>) останавливает все записи в каталог.</li>
+    </ul>
+  </div>
+  <div class="box plus">
+    <h3>Плюсы</h3>
+    <ul>
+      <li>Изменение не пропускается: массовые правки, SQL руками, каскадные удаления, партнёры, фото, переводы.</li>
+      <li>be не знает о читателях и никого не вызывает; ни один ответ API, бота, Mini App и админки не меняется.</li>
+      <li>Данные людей не уходят: в журнале нет значений, роль видит только разрешённые столбцы.</li>
+      <li>Простой любого звена ничего не теряет: каждое читает со своей позиции.</li>
+      <li>Переход на CRM для сайта это смена адреса и одна пересборка витрины.</li>
+    </ul>
+  </div>
+</div>
+
+<h2><span class="n">2</span> Служебный API для клиентов сайта</h2>
+<div class="decision">
+  <p><b>Решение.</b> Семь методов be под <code>/service/v1</code> за служебным ключом: найти или создать профиль по Telegram ID, прочитать, поставить и снять отметку, прочитать, сохранить и остановить поиск. Правила отметок и поиска собраны в общих функциях, которыми пользуется и Mini App.</p>
+  <p><b>Почему.</b> Клиент сайта входит через Telegram и должен видеть те же отметки, что в Mini App, а бот be должен присылать новые объекты по поиску с сайта. До CRM профили, отметки и поиск живут в be, и владелец решил, что адаптер пишет туда только через методы be.</p>
+</div>
+
+<div class="label">Альтернативы</div>
+<div class="tbl"><table>
+  <thead><tr><th>Вариант</th><th>Почему нет</th></tr></thead>
+  <tbody>
+    <tr><td>Адаптер пишет в таблицы be сам</td><td>Правилами владели бы две программы; миграция be ломала бы адаптер молча</td></tr>
+    <tr><td>Адаптер читает отметки ролью базы</td><td>Роль получила бы Telegram ID клиентов и их отметки</td></tr>
+    <tr><td>API Mini App с initData</td><td>У сайта нет initData, а у нового человека нет профиля</td></tr>
+    <tr><td>be сам проверяет вход Telegram</td><td>be понадобились бы секрет входа и правила сессии сайта</td></tr>
+    <tr><td>ID запроса и память вызовов в be</td><td>Новая таблица и её очистка; порядок команд и так держит адаптер</td></tr>
+    <tr><td>Отдельное приложение для методов</td><td>Лишний процесс, образ и шаг выкладки ради семи методов (вопрос открыт для команды be)</td></tr>
+  </tbody>
+</table></div>
+
+<div class="two">
+  <div class="box">
+    <h3>Риски</h3>
+    <ul>
+      <li>В процессе API be один запрос, ждущий чужую блокировку, останавливает все вызовы, включая Mini App (замер: больше 8 с). Правка это не создаёт, но добавляет трафик; предложен <code>lock_timeout</code>.</li>
+      <li>be не помнит порядок вызовов: старая команда, повторённая после новой, вернёт старое состояние. Адаптер обязан слать команды клиента по одной.</li>
+      <li>Меняется Mini App: «добавить в избранное» теперь снимает «не нравится».</li>
+      <li>Профилю с сайта ставится язык сайта, и бот потом не спрашивает язык.</li>
+      <li>Узнать, разрешил ли человек боту писать, нельзя: сайт всем показывает подсказку открыть бота.</li>
+    </ul>
+  </div>
+  <div class="box plus">
+    <h3>Плюсы</h3>
+    <ul>
+      <li>Всё о клиентах за одним входом: в базе адаптер не видит ни одного идентификатора человека.</li>
+      <li>Правила отметок и поиска в одном месте для сайта и Mini App.</li>
+      <li>Закрыты гонки, которые сегодня оставляют объект с двумя отметками или без них, и ошибки 500 на двойном клике.</li>
+      <li>Повтор вызова безвреден; без ключей методы отвечают 404, а откат правки ничего не ломает в данных.</li>
+    </ul>
+  </div>
+</div>
+
+<footer>Источники: design обеих правок в репозитории be, design адаптера в монорепозитории платформы, design витрины в репозитории сайта. <a href="./">Полная памятка</a>.</footer>
+</main>
+</body>
+</html>
