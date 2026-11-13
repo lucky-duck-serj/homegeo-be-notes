@@ -1,0 +1,849 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Правки be и репликация</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+Condensed:wght@600;700&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&display=swap" rel="stylesheet">
+<style>
+:root {
+  /* Layout: a reading column of engineering notes, a sticky contents rail on wide screens. */
+  --paper: #f5f7f9;
+  --surface: #ffffff;
+  --ink: #17212c;
+  --muted: #5b6676;
+  --line: #d6dde5;
+  --accent: #1d5ea8;
+  --accent-soft: #e5eef9;
+  --band: #edf1f5;
+  --bad: #b42318;  --bad-soft: #fcebe9;
+  --warn: #9a5a00; --warn-soft: #fbf1e1;
+  --ok: #1c7444;   --ok-soft: #e4f3ea;
+  --font-display: "IBM Plex Sans Condensed", "Arial Narrow", system-ui, sans-serif;
+  --font-body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #0e1318; --surface: #151c24; --ink: #e5eaf0; --muted: #9ba7b5; --line: #2b3542;
+    --accent: #72a9ea; --accent-soft: #19283a; --band: #121921;
+    --bad: #f08074; --bad-soft: #3a1d1b; --warn: #e2a654; --warn-soft: #2f2414; --ok: #63c48e; --ok-soft: #15301f;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --paper: #0e1318; --surface: #151c24; --ink: #e5eaf0; --muted: #9ba7b5; --line: #2b3542;
+  --accent: #72a9ea; --accent-soft: #19283a; --band: #121921;
+  --bad: #f08074; --bad-soft: #3a1d1b; --warn: #e2a654; --warn-soft: #2f2414; --ok: #63c48e; --ok-soft: #15301f;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+body {
+  margin: 0; background: var(--paper); color: var(--ink);
+  font: 16px/1.6 var(--font-body);
+  -webkit-text-size-adjust: 100%;
+}
+a { color: var(--accent); }
+a:focus-visible, summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 3px; }
+code, pre { font-family: var(--font-mono); font-size: 0.86em; }
+code { background: var(--band); padding: 0.05em 0.3em; border-radius: 3px; overflow-wrap: anywhere; }
+pre { background: var(--band); border: 1px solid var(--line); border-radius: 6px; padding: 12px 14px; overflow-x: auto; line-height: 1.5; }
+pre code { background: none; padding: 0; overflow-wrap: normal; }
+h1, h2, h3 { font-family: var(--font-display); line-height: 1.2; text-wrap: balance; margin: 0; }
+h1 { font-size: clamp(30px, 5vw, 42px); font-weight: 700; letter-spacing: -0.01em; }
+h2 { font-size: 27px; font-weight: 700; margin-top: 56px; padding-top: 14px; border-top: 2px solid var(--ink); }
+h3 { font-size: 19px; font-weight: 600; margin-top: 30px; }
+p, ul, ol { margin: 10px 0; }
+ul, ol { padding-left: 22px; }
+li { margin: 5px 0; }
+.wrap { display: grid; grid-template-columns: minmax(0, 1fr); gap: 32px; max-width: 1180px; margin: 0 auto; padding: 32px 16px 80px; }
+@media (min-width: 1100px) { .wrap { grid-template-columns: 220px minmax(0, 840px); padding-top: 48px; } }
+nav.toc { font-size: 14px; }
+@media (min-width: 1100px) { nav.toc { position: sticky; top: 24px; align-self: start; } }
+nav.toc ol { list-style: none; padding: 0; margin: 8px 0 0; display: grid; gap: 2px; }
+nav.toc a { display: block; padding: 4px 10px; border-left: 2px solid var(--line); color: var(--ink); text-decoration: none; }
+nav.toc a:hover { border-left-color: var(--accent); color: var(--accent); }
+.toc-title { font: 600 12px var(--font-mono); text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); }
+main { min-width: 0; }
+.lede { font-size: 18px; max-width: 68ch; margin-top: 14px; }
+.meta { display: flex; flex-wrap: wrap; gap: 8px 18px; margin-top: 16px; font: 13px var(--font-mono); color: var(--muted); }
+.prose { max-width: 70ch; }
+.pair { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; margin-top: 20px; }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 18px 20px; }
+.card h3 { margin-top: 0; }
+.card .tag { font: 500 12px var(--font-mono); color: var(--accent); }
+.card dl { margin: 12px 0 0; display: grid; gap: 8px; }
+.card dt { font-weight: 600; font-size: 14px; }
+.card dd { margin: 0; font-size: 15px; }
+.rule { margin-top: 18px; padding: 14px 18px; background: var(--accent-soft); border-left: 4px solid var(--accent); border-radius: 0 6px 6px 0; max-width: 72ch; }
+figure { margin: 22px 0; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 14px; }
+.fig-scroll { overflow-x: auto; }
+figure svg { display: block; width: 100%; min-width: 620px; height: auto; font-family: var(--font-body); }
+figcaption { margin-top: 10px; font-size: 14px; color: var(--muted); }
+svg .band { fill: var(--band); }
+svg .band-label { fill: var(--muted); font: 600 12px var(--font-mono); letter-spacing: 0.03em; }
+svg .node { fill: var(--surface); stroke: var(--ink); stroke-width: 1.2; }
+svg .node-main { fill: var(--surface); stroke: var(--accent); stroke-width: 1.8; }
+svg .side { fill: var(--surface); stroke: var(--line); stroke-width: 1.2; }
+svg .t { fill: var(--ink); font-size: 13px; font-weight: 600; }
+svg .s { fill: var(--muted); font-size: 11px; }
+svg .lbl { fill: var(--ink); font-size: 11.5px; }
+svg .flow { stroke: var(--accent); stroke-width: 2; fill: none; color: var(--accent); }
+svg .aux { stroke: var(--muted); stroke-width: 1.3; fill: none; color: var(--muted); }
+svg .dash { stroke-dasharray: 4 3; }
+.hop { margin-top: 26px; padding-left: 16px; border-left: 3px solid var(--line); }
+.hop h3 { margin-top: 0; display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; }
+.hop h3 .n { font: 600 13px var(--font-mono); color: var(--accent); }
+.tbl { overflow-x: auto; margin: 14px 0; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); }
+table { border-collapse: collapse; width: 100%; font-size: 14.5px; }
+th, td { text-align: left; vertical-align: top; padding: 9px 12px; border-bottom: 1px solid var(--line); }
+th { font-weight: 600; background: var(--band); font-size: 13px; }
+tr:last-child td { border-bottom: 0; }
+td.num { font-variant-numeric: tabular-nums; white-space: nowrap; }
+tr.total td { font-weight: 600; }
+.cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; margin-top: 16px; }
+.col { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 16px 18px; border-top: 4px solid var(--ok); }
+.col.minus { border-top-color: var(--warn); }
+.col h3 { margin-top: 0; }
+.col ul { padding-left: 18px; }
+.pit { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 4px 12px; padding: 12px 0; border-bottom: 1px solid var(--line); }
+.pit:last-child { border-bottom: 0; }
+.pit .body p { margin: 4px 0; }
+.pit .what { font-weight: 600; }
+.pit .fix { color: var(--muted); font-size: 15px; }
+.pit .fix b { color: var(--ink); font-weight: 600; }
+.sev { font: 600 11px var(--font-mono); text-transform: uppercase; letter-spacing: 0.04em; padding: 3px 7px; border-radius: 4px; white-space: nowrap; height: fit-content; margin-top: 3px; }
+.sev.high { color: var(--bad); background: var(--bad-soft); }
+.sev.mid { color: var(--warn); background: var(--warn-soft); }
+.sev.low { color: var(--muted); background: var(--band); }
+.group { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 6px 18px; margin-top: 14px; }
+.group-title { font: 600 13px var(--font-mono); color: var(--muted); padding-top: 10px; text-transform: uppercase; letter-spacing: 0.05em; }
+.chips { display: inline-flex; flex-wrap: wrap; gap: 6px; }
+.chip { font: 500 11.5px var(--font-mono); padding: 2px 8px; border-radius: 999px; border: 1px solid var(--line); color: var(--muted); white-space: nowrap; }
+.chip.decision { color: var(--accent); border-color: var(--accent); }
+.chip.fact { color: var(--ok); border-color: var(--ok); }
+.chip.ops { color: var(--warn); border-color: var(--warn); }
+.short { margin-top: 16px; padding: 16px 20px; background: var(--surface); border: 1px solid var(--accent); border-radius: 8px; }
+.short h3 { margin-top: 0; }
+.short ol { margin-bottom: 0; }
+.q { background: var(--surface); border: 1px solid var(--line); border-left: 4px solid var(--accent); border-radius: 0 8px 8px 0; padding: 14px 18px; margin-top: 14px; }
+.q header { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: baseline; }
+.q .qn { font: 600 13px var(--font-mono); color: var(--accent); }
+.q h4 { margin: 0; font-size: 17px; font-weight: 600; flex: 1 1 260px; text-wrap: balance; }
+.q .ask { margin: 10px 0 6px; font-size: 16px; }
+.q details { margin-top: 6px; }
+.q summary { cursor: pointer; color: var(--accent); font-size: 14px; font-weight: 500; }
+.q .opts { list-style: none; padding: 0; margin: 8px 0; display: grid; gap: 6px; }
+.q .opts li { margin: 0; padding: 7px 10px; border-radius: 6px; background: var(--band); font-size: 15px; }
+.q .opts li.chosen { background: var(--ok-soft); box-shadow: inset 3px 0 0 var(--ok); }
+.q .opts li b { font-weight: 600; }
+.q .why { font-size: 15px; margin: 6px 0 0; }
+.q .why b { font-weight: 600; }
+.legend { display: flex; flex-wrap: wrap; gap: 8px 16px; margin-top: 10px; font-size: 14px; color: var(--muted); align-items: center; }
+.ours li { margin: 8px 0; }
+.sources { font-size: 14px; color: var(--muted); }
+.sources code { font-size: 0.82em; }
+@media (max-width: 480px) { body { font-size: 15.5px; } h2 { font-size: 23px; } .q h4 { font-size: 16px; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+<nav class="toc" aria-label="Содержание">
+  <div class="toc-title">Содержание</div>
+  <ol>
+    <li><a href="#summary">Две правки be</a></li>
+    <li><a href="#mechanics">Механика репликации</a></li>
+    <li><a href="#tradeoffs">Плюсы и минусы</a></li>
+    <li><a href="#pitfalls">Подводные камни</a></li>
+    <li><a href="#questions">Вопросы Стасу</a></li>
+    <li><a href="#ours">Что поправить у нас</a></li>
+    <li><a href="#sources">Источники</a></li>
+  </ol>
+</nav>
+
+<main>
+<header>
+  <h1>Две правки be для публичного сайта</h1>
+  <p class="lede">Памятка к разговору со Стасом (backend, команда be): что меняем в be, какие были варианты и почему выбрали эти, как данные доходят до маленькой базы сайта (витрины) и где подводные камни.</p>
+  <div class="meta">
+    <span>Состояние на 13.11.2026</span>
+    <span>PR 1: <code>impl/add-dwelling-change-log</code>, 114 тестов</span>
+    <span>PR 2: <code>impl/add-site-client-service-api</code>, 243 теста, стоит поверх PR 1</span>
+    <span>Реализовано, не выложено, ждёт ревью команды be</span>
+    <span>Публичная версия: без устройства сети и хранилища be</span>
+  </div>
+</header>
+
+<section id="summary">
+<h2>Две правки be</h2>
+<div class="pair">
+  <article class="card">
+    <div class="tag">PR 1 · add-dwelling-change-log</div>
+    <h3>Журнал изменений каталога и роль только для чтения</h3>
+    <dl>
+      <dt>Что</dt>
+      <dd>Триггеры на 21 таблице каталога пишут в <code>bot_catalogchange</code> строку «таблица, ID строки, операция, тип сделки, ID объекта, ID транзакции» в той же транзакции, что и само изменение. Роль <code>platform_adapter</code> читает журнал и разрешённый список столбцов по закрытому сетевому пути. Задача huey раз в сутки удаляет строки старше 7 дней.</dd>
+      <dt>Зачем</dt>
+      <dd>Адаптеру нужно знать о каждом изменении того, что видит клиент, без потерь. Сегодня надёжного сигнала нет: <code>updated_at</code> не двигается массовым <code>update()</code> и SQL руками, цена живёт в строках партнёров, фото и переводы в своих таблицах, удаление не оставляет следа.</dd>
+      <dt>Что меняет в be</dt>
+      <dd>Ни одного ответа API, бота, Mini App и админки. Плюс одна строка журнала на каждую изменённую строку каталога, короткая блокировка таблиц при создании триггеров, первая периодическая задача huey, первые тесты репозитория.</dd>
+    </dl>
+  </article>
+  <article class="card">
+    <div class="tag">PR 2 · add-site-client-service-api</div>
+    <h3>Служебный API для клиентов сайта</h3>
+    <dl>
+      <dt>Что</dt>
+      <dd>Семь методов под <code>/service/v1</code> за ключом <code>Authorization: Bearer</code>: найти или создать профиль по <code>tg_id</code>; прочитать, поставить и снять отметку (избранное, «не нравится», «просмотрено»); прочитать, сохранить и остановить поиск.</dd>
+      <dt>Зачем</dt>
+      <dd>Клиент входит на сайт через Telegram (клиент входа это бот be) и должен видеть те же отметки, что в Mini App, сохранять поиск, а бот be должен присылать по нему новые объекты. Адаптер в таблицы be сам не пишет.</dd>
+      <dt>Что меняет в be</dt>
+      <dd>«Добавить в избранное» в Mini App теперь снимает «не нравится»; лайк и дизлайк стали одной транзакцией с блокировкой профиля; гонки, которые давали 500, получили коды; без ключей методы отвечают 404. Миграций нет.</dd>
+    </dl>
+  </article>
+</div>
+<p class="rule"><b>Граница одна.</b> Данные объектов адаптер читает из базы be сам: только чтение и только по списку столбцов. Всё о людях (профили, отметки, поиск) идёт только через методы be. У роли базы нет ни одного идентификатора человека, даже Telegram ID.</p>
+</section>
+
+<section id="mechanics">
+<h2>Механика репликации</h2>
+<div class="prose">
+<p>«Маленькая база у фронтенда» это <b>витрина</b>: копия опубликованных объектов в SQLite у каждой копии сайта (файл <code>node:sqlite</code> на Node, позже Durable Object в Cloudflare). Страницы читают только её, поэтому сайт ищет и отвечает, даже когда be и адаптер лежат.</p>
+<p>Изменение проходит пять звеньев. На каждом переходе у читателя своя позиция, которую он сохраняет той же транзакцией, что и результат. Поэтому простой любого звена ничего не теряет: после возвращения читатель продолжает со своей позиции.</p>
+</div>
+
+<figure>
+<div class="fig-scroll">
+<svg viewBox="0 0 760 700" role="img" aria-label="Путь изменения: пишущие be меняют таблицы каталога, триггер в той же транзакции пишет строку журнала, адаптер опрашивает журнал ниже горизонта и пересобирает документ, кладёт его в свою ленту, сайт долгим опросом Changes забирает пачку и одной транзакцией пишет её в витрину SQLite, откуда читают страницы.">
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="currentColor"/>
+    </marker>
+  </defs>
+
+  <rect class="band" x="10" y="10" width="740" height="184" rx="8"/>
+  <text class="band-label" x="24" y="32">be: база PostgreSQL be</text>
+  <rect class="band" x="10" y="204" width="740" height="226" rx="8"/>
+  <text class="band-label" x="24" y="226">Адаптер: наш сервис и его PostgreSQL</text>
+  <rect class="band" x="10" y="440" width="740" height="250" rx="8"/>
+  <text class="band-label" x="24" y="462">Сайт: каждая копия читает сама</text>
+
+  <rect class="side" x="24" y="46" width="150" height="48" rx="6"/>
+  <text class="t" x="99" y="66" text-anchor="middle">Пишущие be</text>
+  <text class="s" x="99" y="82" text-anchor="middle">админка, бот, API, SQL</text>
+  <line class="aux" x1="174" y1="70" x2="198" y2="70" marker-end="url(#arr)"/>
+
+  <rect class="node" x="200" y="46" width="320" height="48" rx="6"/>
+  <text class="t" x="360" y="66" text-anchor="middle">Таблицы каталога</text>
+  <text class="s" x="360" y="82" text-anchor="middle">21 таблица: объекты, партнёры, фото, справочники</text>
+
+  <line class="flow" x1="360" y1="94" x2="360" y2="124" marker-end="url(#arr)"/>
+  <text class="lbl" x="372" y="114">триггер, в той же транзакции</text>
+
+  <rect class="node" x="200" y="126" width="320" height="48" rx="6"/>
+  <text class="t" x="360" y="146" text-anchor="middle">Журнал bot_catalogchange</text>
+  <text class="s" x="360" y="162" text-anchor="middle">таблица, ID строки, операция, объект, xact_id</text>
+
+  <rect class="side" x="556" y="126" width="180" height="48" rx="6"/>
+  <text class="t" x="646" y="146" text-anchor="middle">Очистка (huey)</text>
+  <text class="s" x="646" y="162" text-anchor="middle">раз в сутки, старше 7 дней</text>
+  <line class="aux" x1="556" y1="150" x2="522" y2="150" marker-end="url(#arr)"/>
+
+  <line class="flow" x1="360" y1="174" x2="360" y2="264" marker-end="url(#arr)"/>
+  <text class="lbl" x="372" y="226">опрос раз в несколько секунд, роль platform_adapter</text>
+  <text class="lbl" x="372" y="242">читает (xact_id, id) ниже горизонта</text>
+
+  <rect class="side" x="24" y="266" width="150" height="48" rx="6"/>
+  <text class="t" x="99" y="286" text-anchor="middle">Полный проход</text>
+  <text class="s" x="99" y="302" text-anchor="middle">старт, потеря, раз в час</text>
+  <line class="aux dash" x1="174" y1="290" x2="198" y2="290" marker-end="url(#arr)"/>
+
+  <rect class="node" x="200" y="266" width="320" height="48" rx="6"/>
+  <text class="t" x="360" y="286" text-anchor="middle">Пересборка документа Listing</text>
+  <text class="s" x="360" y="302" text-anchor="middle">цена, места, точка, код; хэш решает о ревизии</text>
+
+  <rect class="side" x="556" y="266" width="180" height="48" rx="6"/>
+  <text class="t" x="646" y="286" text-anchor="middle">Фото в R2</text>
+  <text class="s" x="646" y="302" text-anchor="middle">AVIF и WebP, три ширины</text>
+  <line class="aux" x1="520" y1="290" x2="554" y2="290" marker-end="url(#arr)"/>
+
+  <line class="flow" x1="360" y1="314" x2="360" y2="360" marker-end="url(#arr)"/>
+  <text class="lbl" x="372" y="342">та же транзакция, что позиция журнала</text>
+
+  <rect class="node-main" x="200" y="362" width="320" height="48" rx="6"/>
+  <text class="t" x="360" y="382" text-anchor="middle">Лента каталога адаптера</text>
+  <text class="s" x="360" y="398" text-anchor="middle">строка на объект, позиции после фиксации</text>
+
+  <line class="flow" x1="360" y1="410" x2="360" y2="500" marker-end="url(#arr)"/>
+  <text class="lbl" x="372" y="482">Changes(cursor, limit, wait ≤ 25 с)</text>
+  <text class="lbl" x="372" y="497">Connect GET, долгий опрос</text>
+
+  <rect class="node" x="200" y="502" width="320" height="48" rx="6"/>
+  <text class="t" x="360" y="522" text-anchor="middle">Шаг ленты feedStep</text>
+  <text class="s" x="360" y="538" text-anchor="middle">Node: цикл; Cloudflare: будильник объекта</text>
+
+  <rect class="side" x="24" y="502" width="150" height="48" rx="6"/>
+  <text class="t" x="99" y="522" text-anchor="middle">feed_failures</text>
+  <text class="s" x="99" y="538" text-anchor="middle">плохая запись, лента идёт</text>
+  <line class="aux dash" x1="200" y1="526" x2="176" y2="526" marker-end="url(#arr)"/>
+
+  <line class="flow" x1="360" y1="550" x2="360" y2="596" marker-end="url(#arr)"/>
+  <text class="lbl" x="372" y="578">одна транзакция: пачка и курсор</text>
+
+  <rect class="node-main" x="200" y="598" width="320" height="48" rx="6"/>
+  <text class="t" x="360" y="618" text-anchor="middle">Витрина SQLite</text>
+  <text class="s" x="360" y="634" text-anchor="middle">listing, listing_point, listing_withdrawn</text>
+
+  <rect class="side" x="24" y="598" width="150" height="48" rx="6"/>
+  <text class="t" x="99" y="618" text-anchor="middle">Пересборка</text>
+  <text class="s" x="99" y="634" text-anchor="middle">таблицы _new и подмена</text>
+  <line class="aux dash" x1="174" y1="622" x2="198" y2="622" marker-end="url(#arr)"/>
+
+  <rect class="side" x="556" y="598" width="180" height="48" rx="6"/>
+  <text class="t" x="646" y="618" text-anchor="middle">Страницы</text>
+  <text class="s" x="646" y="634" text-anchor="middle">порт Vitrina, кэш CDN 5 с</text>
+  <line class="aux" x1="520" y1="622" x2="554" y2="622" marker-end="url(#arr)"/>
+</svg>
+</div>
+<figcaption>Синие стрелки: основной путь изменения. Пунктир: обходные пути (полный проход вместо журнала, отказ записи, пересборка витрины). Две позиции живут в разных базах: позиция журнала be в базе адаптера, курсор ленты в файле витрины.</figcaption>
+</figure>
+
+<div class="hop">
+<h3><span class="n">Звено 1</span> Запись в be попадает в журнал</h3>
+<ul>
+  <li>На каждой из 21 таблицы два триггера: <code>AFTER INSERT OR UPDATE OR DELETE … FOR EACH ROW</code> с аргументами «тип сделки» и «столбец с ID объекта», и <code>AFTER TRUNCATE … FOR EACH STATEMENT</code> (построчный на <code>TRUNCATE</code> не срабатывает). Таблицы: объекты, партнёры, фото, переводы, связи с удобствами (аренда и продажа), удобства, жилые комплексы, районы, станции, города, их переводы, языки.</li>
+  <li>Строка журнала: <code>id</code>, <code>xact_id</code> (<code>xid8</code>, <code>pg_current_xact_id()</code>), <code>changed_at</code>, <code>table_name</code>, <code>row_id</code>, <code>op</code>, <code>deal</code>, <code>dwelling_id</code>. <b>Значений строки нет</b>: текущее состояние читатель берёт из таблиц, поэтому через журнал не утечёт столбец, который роли читать нельзя.</li>
+  <li>Перенос строки к другому объекту пишет две строки (старый и новый объект). Изменение без новых значений тоже пишется: Django <code>save()</code> всё равно трогает <code>updated_at</code>, лишнюю ревизию потом отсекает хэш у адаптера.</li>
+  <li>Каскадное удаление делает Django (<code>on_delete=CASCADE</code>), у внешних ключей в базе каскада нет. Каждая удалённая зависимая строка попадает в журнал со своим ID объекта.</li>
+  <li>Функция называет журнал со схемой (иначе сессия с другим <code>search_path</code> падала бы на записи) и не читает других таблиц, поэтому не может попасть во взаимную блокировку с приложением.</li>
+  <li>Журнал не видит: <code>ALTER TABLE … DISABLE TRIGGER</code> и сессии с <code>session_replication_role = replica</code> (восстановление дампа, логическая репликация).</li>
+</ul>
+</div>
+
+<div class="hop">
+<h3><span class="n">Звено 2</span> Адаптер читает журнал</h3>
+<ul>
+  <li>Опрос раз в несколько секунд, только основной базы (на реплике правило не проверено), ролью <code>platform_adapter</code> по закрытому пути. Позиция это пара <code>(xact_id, id)</code>, читается только то, что ниже горизонта (самой старой ещё открытой транзакции):</li>
+</ul>
+<pre><code>SELECT id, xact_id, table_name, row_id, op, deal, dwelling_id
+FROM bot_catalogchange
+WHERE (xact_id, id) &gt; (:last_xact_id, :last_id)
+  AND xact_id &lt; pg_snapshot_xmin(pg_current_snapshot())
+ORDER BY xact_id, id
+LIMIT 1000;</code></pre>
+<ul>
+  <li><b>Почему не просто <code>id &gt; позиции</code>.</b> ID строки выдаётся при вставке, а транзакции фиксируются в другом порядке. Транзакция A вставила строку 10 и ещё открыта, B вставила 11 и зафиксировалась: читатель по <code>id</code> прочитает 11, сдвинется, и строку 10 не увидит никогда (опыт на PostgreSQL 13, 14, 15 и 16).</li>
+  <li>Позицию адаптер хранит в своей базе, той же транзакцией, что пересобранные документы.</li>
+  <li><b>С каждой пачкой, в той же картине базы</b>, две проверки. Позиция не раньше <code>bot_catalogchange_pruned</code>: иначе очистка удалила непрочитанное, нужен полный проход. <code>xact_id</code> позиции не выше <code>pg_snapshot_xmax(…)</code>: иначе базу восстановили на новый сервер, счётчик транзакций ушёл назад, нужен полный проход.</li>
+  <li><b>Полный проход</b>: запомнить горизонт <code>H</code>, прочитать каталог целиком (можно несколькими транзакциями), сохранить результат с позицией <code>(H, 0)</code>. Всё, что шло во время прохода, имеет <code>xact_id ≥ H</code> и будет прочитано ещё раз из журнала, а повторная пересборка безвредна. Проход идёт при первом старте, после потери строк, после строки <code>truncate</code> (по этой таблице) и раз в час для сверки (ловит выключенный триггер). Пока журнала в be нет, адаптер живёт полными проходами раз в 5 минут.</li>
+  <li><b>Очистка</b>: задача huey раз в сутки удаляет пачками строки старше 7 дней и ниже горизонта и тем же запросом двигает позицию последней удалённой строки. Время последнего успешного запуска пишется в <code>last_run_at</code>, тревогу на него ставит адаптер (своих метрик у be нет).</li>
+</ul>
+</div>
+
+<div class="hop">
+<h3><span class="n">Звено 3</span> Адаптер собирает документ объекта</h3>
+<ul>
+  <li>По каждой строке журнала адаптер пересобирает затронутый объект в <code>homegeo.catalog.v1.Listing</code>. Опубликован, если <code>is_active</code> и есть хотя бы один партнёр; иначе в ленту идёт снятие <code>REASON_UNPUBLISHED</code> (причину снятия be не различает).</li>
+  <li>Цена, залог и минимальный срок от партнёра с самой низкой ценой (затем <code>sort_num</code>). Районы и станции переводятся в ключи мест платформы таблицей соответствия адаптера; объект с неотображённым районом не публикуется. Точка своя, иначе жилого комплекса. Порядок и <code>published_at</code> из <code>last_activated_at</code>.</li>
+  <li>Публичный код: 8 цифр (7 случайных и контрольная Дамма), выдаётся при первом появлении и не меняется. Номер объекта be наружу не выходит.</li>
+  <li>Фото копирует отдельное задание: из хранилища be в R2, ширины 480, 960, 1600 в AVIF и WebP, имя по SHA-256. Пока фото не скопировано, объект публикуется без него.</li>
+  <li><b>Ревизия растёт, только когда меняется хэш документа.</b> Запись в be, которая не меняет видимого клиенту, в ленту не попадает.</li>
+</ul>
+</div>
+
+<div class="hop">
+<h3><span class="n">Звено 4</span> Лента каталога адаптера</h3>
+<ul>
+  <li>Таблица ленты в PostgreSQL адаптера: одна строка на объект. Изменение переносит строку в конец, поэтому чтение с пустого курсора отдаёт каждый объект один раз, в текущем состоянии. Сборка нового читателя, догон после простоя и сверка это один и тот же вызов.</li>
+  <li>Позиции выдаёт отдельная работа уже после фиксации, под арендой и с замком на голову ленты. Это та же проблема поздней фиксации, что в звене 2, но решена одиночкой: в своей базе мы его себе позволяем, а в be не хотим держать ни одного процесса.</li>
+  <li><code>Changes(cursor, limit, wait)</code>: Connect, метод GET (без побочных эффектов). Ответ: записи <code>ListingChange</code> (код, ревизия, <code>Listing</code> или <code>Withdrawal</code>), <code>next_cursor</code>, флаг <code>restart</code>. С <code>wait</code> до 25 с вызов ждёт изменений; ждущие вызовы будит <code>LISTEN</code> в базе адаптера (там мы единственный слушатель).</li>
+  <li>Эпоха лежит в курсоре: если базу адаптера восстановили из копии, курсор старой эпохи получает <code>restart</code>. Следы снятых хранятся 90 дней; курсор старше тоже получает <code>restart</code>.</li>
+</ul>
+</div>
+
+<div class="hop">
+<h3><span class="n">Звено 5</span> Сайт применяет ленту в витрину</h3>
+<ul>
+  <li>Шаг <code>feedStep</code> в ядре сайта: прочитать <code>feed_state</code>, вызвать <code>Changes</code>, применить пачку, вернуть паузу. На Node его крутит цикл на <code>setTimeout</code>, в Cloudflare будильник Durable Object.</li>
+  <li><b>Пачка и курсор в одной синхронной транзакции SQLite.</b> По каждой записи: ревизия не новее сохранённой, пропустить (идемпотентность); проверить документ (код из 8 цифр с контрольной, числа до 2<sup>53</sup>, цена строкой, хранится в сотых); опубликованное: <code>INSERT … ON CONFLICT(id) DO UPDATE … WHERE excluded.revision &gt; listing.revision</code> и точка в R*Tree; снятое: строка уходит в <code>listing_withdrawn</code> (след на 90 дней для страницы 410 и похожих).</li>
+  <li>Плохая запись не останавливает ленту: она уходит в <code>feed_failures</code>, курсор идёт дальше, следующее хорошее состояние того же объекта закрывает отказ. После трёх падений пачки подряд шаг идёт «по одной» (<code>limit</code> 1), потому что у записи нет своего курсора.</li>
+  <li>Паузы: при сборке и полной пачке 0; в обычной работе 1 с после долгого опроса; ошибки сети от 1 с с удвоением до 60 с; отказ в доступе 60 с и запись в журнал.</li>
+  <li><b>Пересборка без простоя.</b> На <code>restart</code> или миграцию схемы шаг наполняет <code>listing_new</code> и соседние таблицы с пустого курсора, пока старые отвечают на запросы; после догона одной транзакцией меняет таблицы местами (<code>DROP</code>, <code>RENAME</code>, <code>CREATE INDEX</code>, <code>ANALYZE</code>). Опыт: 50 000 объектов с карточкой около 10 КБ наполняются за 1,7 с, подмена 0,25 с, файл 0,8 ГБ.</li>
+  <li>Каждая копия сайта это отдельный читатель: свой файл, свой курсор, без аренды. На запуске копий две, значит два долгих опроса к адаптеру.</li>
+  <li><b>Готовность</b> (решение пользователя 2026-11-13, «вариант Б»): собранная копия готова после догона ленты при старте или после 60 с недоступности платформы; несобранная не готова никогда, поэтому пустая выдача не уходит в CDN.</li>
+</ul>
+</div>
+
+<h3>Задержка от записи в админке до страницы</h3>
+<p class="prose">Оценка по проектам, не замер: замер на стенде ещё впереди (задача 6.4 PR 1).</p>
+<div class="tbl"><table>
+  <thead><tr><th>Шаг</th><th>Задержка</th></tr></thead>
+  <tbody>
+    <tr><td>Транзакция в be зафиксирована, её строка журнала ниже горизонта</td><td class="num">сразу, если на сервере нет долгой пишущей транзакции</td></tr>
+    <tr><td>Опрос журнала адаптером</td><td class="num">до нескольких секунд</td></tr>
+    <tr><td>Пересборка документа и хэш</td><td class="num">миллисекунды</td></tr>
+    <tr><td>Выдача позиции в ленте адаптера</td><td class="num">доли секунды</td></tr>
+    <tr><td>Долгий опрос сайта просыпается, пачка применяется</td><td class="num">десятки миллисекунд</td></tr>
+    <tr><td>Кэш страниц в CDN</td><td class="num">до 5 с</td></tr>
+    <tr class="total"><td>Итого обычно</td><td class="num">около 5-10 с</td></tr>
+  </tbody>
+</table></div>
+
+<h3>Когда что-то ломается</h3>
+<div class="tbl"><table>
+  <thead><tr><th>Что случилось</th><th>Что происходит</th></tr></thead>
+  <tbody>
+    <tr><td>База be или путь до неё лежит</td><td>Лента стоит, сайт отвечает по витрине; после возвращения адаптер дочитывает со своей позиции</td></tr>
+    <tr><td>Адаптер лежит</td><td>Сайт отвечает по витрине; вход и команды кабинета не работают, отметки держит браузер</td></tr>
+    <tr><td>Долгая пишущая транзакция на сервере PostgreSQL be, в любой его базе</td><td>Журнал не читается, пока она открыта; ничего не теряется; тревога на возраст непрочитанной строки</td></tr>
+    <tr><td>Адаптер отстал больше чем на 7 дней</td><td>Видит по <code>bot_catalogchange_pruned</code>, делает полный проход</td></tr>
+    <tr><td>Базу be восстановили на новый сервер или на точку во времени</td><td>Видит по <code>pg_snapshot_xmax</code>, делает полный проход; если счётчик уже ушёл дальше позиции, чинит только часовая сверка</td></tr>
+    <tr><td>Триггер выключили или залили дамп с ролью репликации</td><td>Изменений нет в журнале; <code>check_catalog_log</code> падает; часовая сверка чинит копию</td></tr>
+    <tr><td>Базу адаптера восстановили из копии</td><td>Новая эпоха, сайт получает <code>restart</code> и пересобирает витрину рядом со старой</td></tr>
+    <tr><td>Копию сайта перезапустили</td><td>Продолжает с курсора в своём файле</td></tr>
+    <tr><td>Переход с адаптера на CRM</td><td><code>restart</code>, пересборка без простоя, код сайта не меняется</td></tr>
+  </tbody>
+</table></div>
+</section>
+
+<section id="tradeoffs">
+<h2>Плюсы и минусы выбранного пути</h2>
+<div class="cols">
+  <div class="col">
+    <h3>Плюсы</h3>
+    <ul>
+      <li>Изменение не пропускается: триггер в той же транзакции видит массовые <code>update()</code>, SQL руками, каскадные удаления, изменения партнёров, фото и переводов.</li>
+      <li>be никого не вызывает и не знает о читателях; ответы API, бота, Mini App и админки не меняются.</li>
+      <li>Данные людей не уходят: журнал без значений, роль по разрешённому списку столбцов, права проверяются скриптом по действующим правам базы.</li>
+      <li>Каждое звено читает со своей позиции: простой любого звена ничего не теряет.</li>
+      <li>Сайт не зависит от be во время запроса: страницы читают локальный SQLite, выдача быстрая и работает при упавших be и адаптере.</li>
+      <li>Переход на CRM для сайта это смена адреса и одна пересборка.</li>
+      <li>В обычной работе цена для be мала: одна вставка около 190 байт на изменённую строку.</li>
+      <li>Отметки стали честнее и для Mini App: избранное и «не нравится» больше не совпадают, гонки не оставляют обе отметки или ни одной.</li>
+    </ul>
+  </div>
+  <div class="col minus">
+    <h3>Минусы и цена</h3>
+    <ul>
+      <li>Упавшая вставка в журнал роняет запись в be. Это единственный путь навредить be, поэтому функция минимальна и на каждую таблицу есть тест.</li>
+      <li>Массовые запросы медленнее примерно вдвое: 100 000 объектов за 1,7 с против 0,85 с (ноутбук, PostgreSQL 16.1).</li>
+      <li>Задержка в секунды, а не в доли секунды: без <code>NOTIFY</code>.</li>
+      <li>Одна долгая пишущая транзакция где угодно на сервере PostgreSQL останавливает ленту.</li>
+      <li>Адаптер читает таблицы be по именам столбцов: это неявный контракт со схемой be.</li>
+      <li>Нужна работа команды be вне кода: роль и пароль, закрытый путь, ключи, huey на stage, окно выкладки.</li>
+      <li>Цепочка длинная (журнал be, лента адаптера, витрина), у каждого звена свои позиции и правила восстановления: больше кода и тестов.</li>
+      <li>Каждая копия сайта читает ленту сама: N копий дают N долгих опросов и N полных проходов при пересборке; на время пересборки место на диске удваивается.</li>
+    </ul>
+  </div>
+</div>
+</section>
+
+<section id="pitfalls">
+<h2>Подводные камни</h2>
+<p class="prose">Отмечено, насколько больно, если камень сработает, и что уже сделано или предложено.</p>
+
+<div class="group">
+<div class="group-title">Журнал и роль (PR 1)</div>
+<div class="pit"><span class="sev high">высокий</span><div class="body">
+  <p class="what">Горизонт общий для всего сервера PostgreSQL, а не для одной базы.</p>
+  <p>Транзакция с ID транзакции в другой базе того же сервера (например, stage рядом с production) держит читателя production. Держат и <code>SELECT … FOR UPDATE</code> / <code>FOR SHARE</code>, и подготовленные транзакции; обычный <code>SELECT</code> не держит.</p>
+  <p class="fix"><b>Что делаем:</b> метрика и тревога на возраст непрочитанной строки. Нужен ответ: один ли сервер у stage и production, бывают ли ручные сессии <code>psql</code>.</p>
+</div></div>
+<div class="pit"><span class="sev high">высокий</span><div class="body">
+  <p class="what">Восстановление базы be на новый сервер или на точку во времени.</p>
+  <p>Счётчик транзакций идёт назад, новые строки получают <code>xact_id</code> ниже позиции адаптера, и запрос их не вернёт никогда.</p>
+  <p class="fix"><b>Что делаем:</b> сравнение с <code>pg_snapshot_xmax</code> на каждой пачке и часовая сверка. В design адаптера этой проверки пока нет (раздел «Что поправить у нас»).</p>
+</div></div>
+<div class="pit"><span class="sev high">высокий</span><div class="body">
+  <p class="what">Очистка удаляет строки прямо впереди читателя посреди догона.</p>
+  <p>Если сравнивать позицию с удалённой один раз перед серией пачек, читатель перешагнёт дыру и не заметит потерю (опыт 11).</p>
+  <p class="fix"><b>Что делаем:</b> сравнение с каждой пачкой, в картине базы самой пачки.</p>
+</div></div>
+<div class="pit"><span class="sev mid">средний</span><div class="body">
+  <p class="what">Запись мимо триггера.</p>
+  <p><code>DISABLE TRIGGER</code>, <code>session_replication_role = replica</code> (<code>pg_restore</code>, логическая репликация) не оставляют строк в журнале.</p>
+  <p class="fix"><b>Что делаем:</b> <code>check_catalog_log</code> после каждой выкладки, часовая сверка у адаптера.</p>
+</div></div>
+<div class="pit"><span class="sev mid">средний</span><div class="body">
+  <p class="what">Блокировка таблицы журнала останавливает все записи в каталог.</p>
+  <p>Режим <code>SHARE</code> и сильнее (<code>CREATE INDEX</code> без <code>CONCURRENTLY</code>, <code>VACUUM FULL</code>, <code>ALTER TABLE</code>) заставляет ждать каждую запись в таблицы каталога. Обычный <code>VACUUM</code> безопасен.</p>
+  <p class="fix"><b>Что делаем:</b> такие работы только вне часов работы сотрудников; спросить про регламентные работы be.</p>
+</div></div>
+<div class="pit"><span class="sev mid">средний</span><div class="body">
+  <p class="what">Блокировки при выкладке триггеров.</p>
+  <p><code>CREATE TRIGGER</code> ждёт открытые пишущие транзакции и задерживает новые записи; оба ожидания с ограничением не дождутся друг друга (опыт 7).</p>
+  <p class="fix"><b>Что делаем:</b> неатомарная миграция, каждый триггер в своей транзакции с <code>lock_timeout</code> 2 с и повтором, миграцию можно запустить снова; тихое окно.</p>
+</div></div>
+<div class="pit"><span class="sev mid">средний</span><div class="body">
+  <p class="what">Будущие миграции be ломают адаптер молча.</p>
+  <p>Переименование или замена таблицы каталога должны перенести триггер. Переименование столбца не ловит ни проверка, ни права, а SQL адаптера сломается.</p>
+  <p class="fix"><b>Что делаем:</b> <code>check_catalog_log</code> ловит триггеры. Для столбцов нужна договорённость с командой be.</p>
+</div></div>
+<div class="pit"><span class="sev mid">средний</span><div class="body">
+  <p class="what">Изменение справочной строки касается многих объектов.</p>
+  <p>Координаты или название жилого комплекса, название района: в строке журнала <code>dwelling_id</code> пуст. Адаптер должен сам найти и пересобрать зависимые объекты.</p>
+  <p class="fix"><b>Что делаем:</b> в design адаптера это не расписано (раздел «Что поправить у нас»).</p>
+</div></div>
+<div class="pit"><span class="sev low">низкий</span><div class="body">
+  <p class="what">Первая периодическая задача huey в be, а на stage потребитель не запущен.</p>
+  <p>Остановившаяся очистка: журнал растёт, диск заполняется раньше.</p>
+  <p class="fix"><b>Что делаем:</b> тревога на <code>last_run_at</code>; просьба запускать huey на stage.</p>
+</div></div>
+<div class="pit"><span class="sev low">низкий</span><div class="body">
+  <p class="what">Порядок выдачи из <code>last_activated_at</code>.</p>
+  <p>Повторная активация поднимает объект наверх выдачи. Надо понять, когда be двигает это поле.</p>
+</div></div>
+<div class="pit"><span class="sev low">низкий</span><div class="body">
+  <p class="what">Объект без партнёра не публикуется.</p>
+  <p class="fix"><b>Что делаем:</b> тревога, если объект без партнёра дольше 3 дней.</p>
+</div></div>
+</div>
+
+<div class="group">
+<div class="group-title">Служебный API (PR 2)</div>
+<div class="pit"><span class="sev high">высокий</span><div class="body">
+  <p class="what">Один застрявший запрос останавливает весь процесс API, вместе с Mini App.</p>
+  <p>Запрос, ждущий чужую блокировку (миграция, ручная сессия), занимает единственный синхронный поток процесса, а <code>DbMiddleware</code> ждёт этот поток на каждом вызове. Замер: вызов, которому база не нужна, ждал больше 8 с. Правка этого не вызывает, но добавляет трафик в тот же процесс.</p>
+  <p class="fix"><b>Что предложено:</b> <code>lock_timeout=5000</code> в настройках соединения процесса API (с <code>1s</code> в опыте застрявший вызов падал через секунду, остальные отвечали за полсекунды).</p>
+</div></div>
+<div class="pit"><span class="sev high">высокий</span><div class="body">
+  <p class="what">be применяет вызовы в порядке прихода и ничего не помнит.</p>
+  <p>Если адаптер повторит старую команду после новой (поставил избранное, потом «не нравится», потом повтор первого), вернётся старое состояние.</p>
+  <p class="fix"><b>Что делаем:</b> адаптер шлёт команды одного клиента по одной, в порядке клиента, и старую после новой не повторяет.</p>
+</div></div>
+<div class="pit"><span class="sev mid">средний</span><div class="body">
+  <p class="what">Поведение Mini App меняется.</p>
+  <p>«Добавить в избранное» начинает снимать «не нравится». В старых данных есть объекты с обеими отметками; адаптер показывает их избранными, следующая отметка через общую функцию приводит их в порядок.</p>
+</div></div>
+<div class="pit"><span class="sev mid">средний</span><div class="body">
+  <p class="what">Язык профиля из сайта меняет первый диалог с ботом.</p>
+  <p>Вход с сайта на языке, который есть в be, ставит профилю язык, и бот потом о языке не спрашивает. Иврита в be нет: такой профиль остаётся без языка, рассылка берёт тексты по умолчанию.</p>
+</div></div>
+<div class="pit"><span class="sev low">низкий</span><div class="body">
+  <p class="what">Сохранение поиска падает с 500 без <code>ContentTranslation</code>.</p>
+  <p>Как и в Mini App: ревизия поиска рисуется текстами бота.</p>
+</div></div>
+<div class="pit"><span class="sev low">низкий</span><div class="body">
+  <p class="what">Нельзя узнать, разрешил ли человек боту писать.</p>
+  <p class="fix"><b>Что делаем:</b> поиск сохраняется всегда, сайт всем показывает подсказку открыть бота (решение пользователя 2026-11-13).</p>
+</div></div>
+<div class="pit"><span class="sev low">низкий</span><div class="body">
+  <p class="what"><code>tg_id</code> в be это текстовый столбец.</p>
+  <p class="fix"><b>Что делаем:</b> метод принимает только положительное целое и пишет каноническую десятичную запись, чтобы бот и Mini App нашли ту же строку.</p>
+</div></div>
+</div>
+
+<div class="group">
+<div class="group-title">Витрина сайта (наша сторона)</div>
+<div class="pit"><span class="sev mid">средний</span><div class="body">
+  <p class="what">В контракте нет признака «догнал».</p>
+  <p>Догон сейчас это ответ без записей; при постоянном потоке изменений сборка формально не кончается (на 50 000 объектов не грозит). Вопрос к монорепозиторию открыт, стоит алерт на пересборку дольше 10 минут.</p>
+</div></div>
+<div class="pit"><span class="sev mid">средний</span><div class="body">
+  <p class="what">У записи ленты нет своего курсора.</p>
+  <p>Чтобы обойти одну плохую запись, шаг переходит в медленный режим «по одной».</p>
+</div></div>
+<div class="pit"><span class="sev low">низкий</span><div class="body">
+  <p class="what">Словари на копиях расходятся до 10 минут.</p>
+  <p>Хвост адреса строится по словарю, поэтому две копии могут на время отдать разный канонический адрес, и 301 пойдут по кругу. Решает <code>add-listing-page</code>.</p>
+</div></div>
+<div class="pit"><span class="sev low">низкий</span><div class="body">
+  <p class="what">Запись в Durable Object стоит денег.</p>
+  <p>Пересборка 50 000 объектов это около 300 000 записанных строк (около 0,3 доллара); обычный шаг десятки строк.</p>
+</div></div>
+</div>
+</section>
+
+<section id="questions">
+<h2>Вопросы Стасу</h2>
+<p class="prose">У каждого вопроса раскрываются варианты, которые рассматривали, выбранный вариант и довод. Метки говорят, чего ждём от ответа.</p>
+<div class="legend">
+  <span class="chip decision">решение</span> подтвердить или оспорить выбор
+  <span class="chip fact">факт</span> узнать про production или код be
+  <span class="chip ops">операция</span> кто, что и когда делает
+</div>
+
+<div class="short">
+  <h3>Если времени мало</h3>
+  <ol>
+    <li><a href="#q1">Вопрос 1</a>: триггеры и журнал как источник изменений; есть ли записи мимо Django.</li>
+    <li><a href="#q3">Вопрос 3</a>: самые долгие транзакции, ручные сессии, один ли сервер у stage и production.</li>
+    <li><a href="#q10">Вопрос 10</a>: где работает PostgreSQL production и как до него дойти без открытого порта.</li>
+    <li><a href="#q7">Вопрос 7</a>: как будущие миграции be не сломают адаптер молча.</li>
+    <li><a href="#q16">Вопрос 16</a> и <a href="#q21">вопрос 21</a>: изменение «в избранное» в Mini App и <code>lock_timeout</code> процесса API.</li>
+  </ol>
+</div>
+
+<h3>Журнал изменений (PR 1)</h3>
+
+<article class="q" id="q1">
+  <header><span class="qn">1</span><h4>Источник изменений: триггеры и журнал в базе</h4><span class="chips"><span class="chip decision">решение</span><span class="chip fact">факт</span></span></header>
+  <p class="ask">Устраивает ли вас, что сигнал об изменениях дают триггеры базы, а не код приложения? Есть ли места, где каталог меняется мимо Django: скрипты, импорты, <code>pg_restore</code>, ручной SQL?</p>
+  <details><summary>Варианты и почему выбрали</summary>
+  <ul class="opts">
+    <li><b>Опрашивать <code>updated_at</code>.</b> Не видит массовых <code>update()</code>, SQL руками, изменений партнёров, фото, переводов и удалений. Так адаптер работает, пока журнала нет: полный проход раз в 5 минут.</li>
+    <li><b>Сигналы Django или HTTP-вызов из be.</b> Не видят массовых операций и SQL руками, теряются, пока читатель лежит, и заставляют be вызывать платформу.</li>
+    <li><b>Outbox в коде Python.</b> О нём должен помнить каждый пишущий; массовые действия админки и миграции не вспомнят.</li>
+    <li><b>Логическая репликация или Debezium.</b> Слот репликации и настройка сервера; без читателя может остановиться очистка WAL; отдаются целые строки, вместе с телефоном собственника.</li>
+    <li><b>Триггеры на запрос с переходными таблицами.</b> Дешевле для массовых запросов, но три триггера на таблицу вместо одного. Запасной вариант, если замер массовых запросов будет плохим.</li>
+    <li class="chosen"><b>Выбрано: построчные триггеры</b> пишут в журнал только «что и где изменилось», в той же транзакции.</li>
+  </ul>
+  <p class="why"><b>Почему:</b> единственный вариант, который видит все пути записи и не несёт значений строк; be ничего не вызывает и не держит ни одного нового процесса для правильности.</p>
+  </details>
+</article>
+
+<article class="q" id="q2">
+  <header><span class="qn">2</span><h4>Только опрос, без NOTIFY</h4><span class="chips"><span class="chip decision">решение</span></span></header>
+  <p class="ask">Устраивает ли задержка в несколько секунд? Пользуется ли сейчас кто-то <code>LISTEN/NOTIFY</code> на сервере be?</p>
+  <details><summary>Варианты и почему выбрали</summary>
+  <ul class="opts">
+    <li><b>NOTIFY рядом с журналом.</b> Задержка в доли секунды, первый проект платформы на это рассчитывал.</li>
+    <li class="chosen"><b>Выбрано: только опрос</b> раз в несколько секунд по индексу; почти всегда возвращает пустой ответ.</li>
+  </ul>
+  <p class="why"><b>Почему:</b> очередь уведомлений одна на весь сервер (по умолчанию 8 ГБ); слушатель, застрявший в транзакции, останавливает её очистку, и при полной очереди падает каждая фиксация с уведомлением, то есть рискуют пишущие be. Транзакцию с NOTIFY нельзя подготовить к двухфазной фиксации. Для правильности он не нужен, а страницы и так кэшируются на 5 с. Добавить можно позже одной миграцией функции. В своей базе адаптер NOTIFY использует: там он единственный слушатель.</p>
+  </details>
+</article>
+
+<article class="q" id="q3">
+  <header><span class="qn">3</span><h4>Порядок чтения по ID транзакции и горизонт</h4><span class="chips"><span class="chip decision">решение</span><span class="chip fact">факт</span></span></header>
+  <p class="ask">Какие самые долгие транзакции бывают на production? Держит ли кто-нибудь ручные сессии <code>psql</code> открытыми? Stage и production это базы одного сервера PostgreSQL? Какая версия (нужна 13 или новее)?</p>
+  <details><summary>Варианты и почему выбрали</summary>
+  <ul class="opts">
+    <li><b>Читать по <code>id &gt; позиции</code>.</b> Просто, но строка поздно зафиксированной транзакции пропускается навсегда (опыт 1).</li>
+    <li><b>Позиции выдаёт задача be после фиксации.</b> Нет задержки горизонта, но в be нужен процесс, который работает всегда.</li>
+    <li class="chosen"><b>Выбрано: <code>(xact_id, id)</code> ниже горизонта</b> <code>pg_snapshot_xmin(pg_current_snapshot())</code>.</li>
+  </ul>
+  <p class="why"><b>Почему:</b> be ничего не нужно запускать. Цена: долгая пишущая транзакция в любой базе сервера задерживает ленту (ничего не теряя), поэтому важны ответы про длину транзакций и общий сервер.</p>
+  </details>
+</article>
+
+<article class="q" id="q4">
+  <header><span class="qn">4</span><h4>Срок хранения 7 дней и очистка задачей huey</h4><span class="chips"><span class="chip decision">решение</span><span class="chip ops">операция</span></span></header>
+  <p class="ask">7 дней подходят? Можно ли, чтобы выкладка stage запускала потребителя huey, как production? Кто будет смотреть строку лога очистки?</p>
+  <details><summary>Варианты и почему выбрали</summary>
+  <ul class="opts">
+    <li><b>Хранить вечно.</b> Таблица растёт без предела.</li>
+    <li><b>Короткий срок без памяти об удалённом.</b> Отставший читатель молча теряет строки.</li>
+    <li class="chosen"><b>Выбрано: 7 дней и позиция последней удалённой строки</b> в <code>bot_catalogchange_pruned</code>.</li>
+  </ul>
+  <p class="why"><b>Почему:</b> отставший читатель сам видит потерю и делает полный проход. Задача берёт рекомендательную блокировку сессии, чтобы два запуска не пересекались, и удаляет только строки ниже горизонта.</p>
+  </details>
+</article>
+
+<article class="q" id="q5">
+  <header><span class="qn">5</span><h4>Цена записи и массовые операции</h4><span class="chips"><span class="chip fact">факт</span><span class="chip ops">операция</span></span></header>
+  <p class="ask">Какие массовые операции бывают в be (действия админки над многими объектами, импорты, миграции данных) и как часто? Можем ли получить копию production, чтобы замерить миграцию, массовое изменение и рост WAL (задачи 6.1 и 6.2)?</p>
+  <details><summary>Варианты и почему выбрали</summary>
+  <ul class="opts">
+    <li class="chosen"><b>Выбрано: построчный триггер.</b> Одна строка журнала на каждую изменённую строку.</li>
+    <li><b>Триггер на запрос с переходными таблицами.</b> Берём, если замер на копии покажет слишком сильное замедление.</li>
+  </ul>
+  <p class="why"><b>Почему:</b> на ноутбуке массовое изменение 100 000 объектов 1,7 с с триггером и 0,85 с без; строка журнала с индексами около 190 байт. При темпе правок в админке это незаметно, но чисел production у нас нет.</p>
+  </details>
+</article>
+
+<article class="q" id="q6">
+  <header><span class="qn">6</span><h4>Выкладка триггеров</h4><span class="chips"><span class="chip ops">операция</span></span></header>
+  <p class="ask">Как у вас идут миграции на production (сами при выкладке или руками)? Какое окно тихое? Подходит ли <code>lock_timeout</code> 2 с с повтором?</p>
+  <details><summary>Что предложено</summary>
+  <p class="why"><code>CREATE TRIGGER</code> берёт блокировку таблицы, которая ждёт открытые пишущие транзакции и задерживает новые записи. Поэтому миграция неатомарная: каждый триггер в своей короткой транзакции с ограничением ожидания, неудачный повторяется, миграцию можно запустить снова. Порядок: копия production, stage, production в тихий час, затем закрытый путь. Откат: обратные миграции и обратный скрипт роли, данные каталога не трогаются.</p>
+  </details>
+</article>
+
+<article class="q" id="q7">
+  <header><span class="qn">7</span><h4>Будущие миграции таблиц каталога</h4><span class="chips"><span class="chip decision">решение</span></span></header>
+  <p class="ask">Как договоримся, чтобы миграции be, которые переименовывают таблицы или столбцы каталога, не ломали адаптер молча? Запускать <code>check_catalog_log</code> в CI be? Предупреждать нас о таких миграциях?</p>
+  <details><summary>Почему это важно</summary>
+  <p class="why">Проверка ловит потерянный или выключенный триггер и роль, которая пишет в каталог, но не в журнал. Но адаптер читает столбцы по именам: переименование столбца не поймает ни проверка, ни права, а новый столбец адаптер не увидит, пока его не выдадут роли намеренно. Это неявный контракт со схемой be.</p>
+  </details>
+</article>
+
+<article class="q" id="q8">
+  <header><span class="qn">8</span><h4>Регламентные работы с базой</h4><span class="chips"><span class="chip fact">факт</span></span></header>
+  <p class="ask">Делаете ли вы работы с сильной блокировкой таблиц (<code>VACUUM FULL</code>, <code>CREATE INDEX</code> без <code>CONCURRENTLY</code>, <code>ALTER TABLE</code>, перепаковка таблиц)? Кто их запускает и когда?</p>
+  <details><summary>Почему это важно</summary>
+  <p class="why">Блокировка таблицы журнала режимом <code>SHARE</code> и сильнее заставляет ждать каждую запись в каталог (опыт 14). Обычный <code>VACUUM</code> и <code>CREATE INDEX CONCURRENTLY</code> безопасны.</p>
+  </details>
+</article>
+
+<article class="q" id="q9">
+  <header><span class="qn">9</span><h4>Роль platform_adapter</h4><span class="chips"><span class="chip decision">решение</span><span class="chip ops">операция</span></span></header>
+  <p class="ask">Подходит ли роль с правами на отдельные столбцы и скрипт проверки действующих прав? Кто создаёт роль и хранит пароль?</p>
+  <details><summary>Варианты и почему выбрали</summary>
+  <ul class="opts">
+    <li><b>Права на таблицы целиком.</b> Видны телефоны и ФИО собственников, комментарии.</li>
+    <li><b>Представления.</b> Их надо поддерживать вместе со схемой; права через владельца представления сложнее проверить.</li>
+    <li class="chosen"><b>Выбрано: права на столбцы по разрешённому списку</b> из <code>bot/catalog_reader.py</code>, SQL роли генерируется из него, тест ловит расхождение.</li>
+  </ul>
+  <p class="why"><b>Почему:</b> столбец вне списка прочитать нельзя, каждый столбец назван полем, которое им пользуется. Скрипт проверяет действующие права через <code>has_table_privilege</code> и <code>has_column_privilege</code> (права могут прийти через <code>PUBLIC</code>, членство, представление или функцию владельца) и пробует запрещённое от имени роли. Ограничения роли: 3 подключения, <code>statement_timeout</code> 30 с, <code>idle_in_transaction_session_timeout</code> 60 с. Пароль создаёт команда be и передаёт в секреты установки по закрытому каналу.</p>
+  </details>
+</article>
+
+<article class="q" id="q10">
+  <header><span class="qn">10</span><h4>Сетевой путь до базы</h4><span class="chips"><span class="chip fact">факт</span><span class="chip ops">операция</span></span></header>
+  <p class="ask">Где работает PostgreSQL production и какой закрытый путь от машины адаптера до базы для вас приемлем?</p>
+  <details><summary>Что важно</summary>
+  <p class="why">Порт базы в Интернет не открывается; правило доступа касается только роли адаптера и ничего не меняет для остальных ролей. Варианты устройства пути обсудим устно.</p>
+  </details>
+</article>
+
+<article class="q" id="q11">
+  <header><span class="qn">11</span><h4>Таблицы и столбцы на production</h4><span class="chips"><span class="chip fact">факт</span></span></header>
+  <p class="ask">Совпадает ли схема production с миграциями (21 таблица, имена таблиц связей и их столбцов)? Нет ли видимых клиенту данных в других таблицах?</p>
+  <details><summary>Почему это важно</summary>
+  <p class="why">Правило одно: в журнал пишется каждая таблица, которую читает адаптер, поэтому ничто прочитанное не меняется незаметно. Расхождение на production покажет <code>catalog_reader_role --check</code>, когда роль там создана. С 2026-11-13 роли выданы и столбцы экрана фильтров be (рынок, ремонт, десять столбцов продажи, отметки показа удобств в фильтрах): решение пользователя «Всё из фильтров be».</p>
+  </details>
+</article>
+
+<article class="q" id="q12">
+  <header><span class="qn">12</span><h4>Смысл полей be</h4><span class="chips"><span class="chip fact">факт</span></span></header>
+  <p class="ask">Верно ли, что «опубликован» это <code>is_active</code> и хотя бы один партнёр? Когда меняется <code>last_activated_at</code>: только при активации в админке или и при массовых действиях? Бывает ли объект без партнёра надолго?</p>
+  <details><summary>Почему это важно</summary>
+  <p class="why">Порядок выдачи и дата публикации берутся из <code>last_activated_at</code>; цена от партнёра с самой низкой ценой, затем по <code>sort_num</code>.</p>
+  </details>
+</article>
+
+<h3>Служебный API (PR 2)</h3>
+
+<article class="q" id="q13">
+  <header><span class="qn">13</span><h4>Методы be вместо записи в таблицы</h4><span class="chips"><span class="chip decision">решение</span></span></header>
+  <p class="ask">Готова ли команда be держать эти семь методов до появления CRM платформы?</p>
+  <details><summary>Варианты и почему выбрали</summary>
+  <ul class="opts">
+    <li><b>Адаптер пишет в таблицы be сам.</b> Правилами профиля и поиска владели бы две программы, миграция be молча ломала бы адаптер.</li>
+    <li><b>Адаптер читает отметки ролью базы.</b> Так было в первом проекте; роль получила бы Telegram ID клиентов и их отметки.</li>
+    <li><b>API Mini App с initData.</b> У сайта нет initData (у него ID-токен Telegram из другого потока), а у нового человека нет профиля, и API отвечает 401.</li>
+    <li class="chosen"><b>Выбрано (решение владельца): методы be за служебным ключом.</b></li>
+  </ul>
+  <p class="why"><b>Почему:</b> всё о клиентах остаётся за одним входом и одной реализацией правил.</p>
+  </details>
+</article>
+
+<article class="q" id="q14">
+  <header><span class="qn">14</span><h4>Где живут методы</h4><span class="chips"><span class="chip decision">решение</span></span></header>
+  <p class="ask">Роутер <code>/service/v1</code> в существующем приложении FastAPI или отдельное приложение со своим контейнером?</p>
+  <details><summary>Варианты и почему выбрали</summary>
+  <ul class="opts">
+    <li class="chosen"><b>Предложено: отдельный роутер в существующем приложении</b>, рядом с роутером Mini App, со своей проверкой ключа. Без ключей роутер не подключается, пути отвечают 404.</li>
+    <li><b>Отдельное маленькое приложение.</b> Полная изоляция служебного входа ценой ещё одного процесса, образа и шага выкладки ради семи методов.</li>
+  </ul>
+  </details>
+</article>
+
+<article class="q" id="q15">
+  <header><span class="qn">15</span><h4>Защита служебного входа</h4><span class="chips"><span class="chip decision">решение</span><span class="chip ops">операция</span></span></header>
+  <p class="ask">Устраивает ли защита служебного входа ключом и закрытым путём? Как передаём и меняем ключи и секрет входа Telegram?</p>
+  <details><summary>Варианты и почему выбрали</summary>
+  <ul class="opts">
+    <li><b>be сам проверяет ID-токен Telegram.</b> be понадобились бы секрет клиента входа и правила сессии сайта.</li>
+    <li><b>Клиентский сертификат или подпись каждого запроса.</b> Больше операций, а при закрытом пути и сменяемом ключе новой защиты не даёт.</li>
+    <li class="chosen"><b>Выбрано: <code>Authorization: Bearer</code>,</b> два ключа одновременно для смены без простоя, сравнение за постоянное время, тело до 64 КиБ, в лог только метод, исход и время.</li>
+  </ul>
+  <p class="why"><b>Почему:</b> be доверяет адаптеру по ключу и по пути; токен бота остаётся у be, сайт его не получает. Детали сетевой защиты обсудим устно.</p>
+  </details>
+</article>
+
+<article class="q" id="q16">
+  <header><span class="qn">16</span><h4>Общая функция отметок и изменение Mini App</h4><span class="chips"><span class="chip decision">решение</span><span class="chip fact">факт</span></span></header>
+  <p class="ask">Согласны ли вы, что «добавить в избранное» в Mini App теперь снимает «не нравится»? Переводить ли «убрать из избранного» и «просмотрено» на общую функцию сейчас или позже? Сколько сейчас объектов, которые у одного профиля и избранные, и «не нравится» (задача 0.5)?</p>
+  <details><summary>Варианты и почему выбрали</summary>
+  <ul class="opts">
+    <li><b>Оставить Mini App как есть,</b> правило только в служебных методах. Два правила для одного человека, и гонки остаются.</li>
+    <li><b>Одна транзакция на действие без блокировки.</b> Две такие транзакции не видят новые строки друг друга и оставляют обе отметки (воспроизведено SQL).</li>
+    <li class="chosen"><b>Выбрано: <code>set_mark</code></b> под <code>transaction.atomic()</code> с <code>SELECT … FOR NO KEY UPDATE</code> на строке профиля.</li>
+  </ul>
+  <p class="why"><b>Почему:</b> двое пишущих для одного человека идут друг за другом, откуда бы ни пришли. <code>FOR NO KEY UPDATE</code>, а не <code>FOR UPDATE</code>: не мешает вставкам других строк, которые ссылаются на профиль (заметки, предложения цены). Сегодня четыре отдельные записи лайка и дизлайка в порядке «добавить, добавить, снять, снять» оставляют объект без отметок.</p>
+  </details>
+</article>
+
+<article class="q" id="q17">
+  <header><span class="qn">17</span><h4>Повтор без ID запроса</h4><span class="chips"><span class="chip decision">решение</span></span></header>
+  <p class="ask">Нормально ли, что be не помнит вызовы, а порядок команд держит адаптер?</p>
+  <details><summary>Варианты и почему выбрали</summary>
+  <ul class="opts">
+    <li><b>ID запроса и таблица вызовов в be.</b> be мог бы отказать старой команде, пришедшей поздно, ценой новой таблицы и её очистки.</li>
+    <li class="chosen"><b>Выбрано: методы «сделай так».</b> Повтор с тем же содержимым даёт то же состояние и тот же ответ.</li>
+  </ul>
+  <p class="why"><b>Почему:</b> адаптер и так держит команды клиента по порядку в своей базе, второй памяти не нужно. Правило «одна команда клиента за раз, старую после новой не повторять» записано и в спеке be.</p>
+  </details>
+</article>
+
+<article class="q" id="q18">
+  <header><span class="qn">18</span><h4>Язык профиля, созданного с сайта</h4><span class="chips"><span class="chip decision">решение</span></span></header>
+  <p class="ask">Ставить ли профилю язык сайта, если такой язык есть в be, а у профиля языка нет? Тогда бот этого человека о языке не спросит.</p>
+  <details><summary>Варианты и почему выбрали</summary>
+  <ul class="opts">
+    <li><b>Никогда не ставить.</b> Бот спросит язык, как сегодня.</li>
+    <li class="chosen"><b>Предложено: ставить только пустому профилю.</b> Язык, выбранный в боте, не меняется никогда.</li>
+  </ul>
+  <p class="why"><b>Почему:</b> человек действительно выбрал язык сайта, и сообщения по сохранённому поиску сразу приходят на нём. Первая версия проекта ошибочно считала, что профиль без языка обрывает рассылку всем следующим; код это опроверг, язык не выдумывается.</p>
+  </details>
+</article>
+
+<article class="q" id="q19">
+  <header><span class="qn">19</span><h4>Профиль с выключенным доступом</h4><span class="chips"><span class="chip decision">решение</span></span></header>
+  <p class="ask">Отказывать в командах профилю с <code>has_access = false</code> и сообщать флаг при входе? Что вы ждёте от сайта: не пускать человека или пускать смотреть без кабинета?</p>
+  <details><summary>Что предложено</summary>
+  <p class="why">Флагом владеет админка; вход ничего не меняет у такого профиля (ни имя, ни язык), команды и чтения отвечают <code>access_denied</code>. Рассылка новых объектов на флаг сегодня не смотрит, и правка это не меняет.</p>
+  </details>
+</article>
+
+<article class="q" id="q20">
+  <header><span class="qn">20</span><h4>Перерисовка сообщений бота после сохранения поиска</h4><span class="chips"><span class="chip decision">решение</span></span></header>
+  <p class="ask">Перерисовывать сообщения бота с фильтром после сохранения поиска с сайта, как это делает Mini App, и не ронять вызов при неудаче?</p>
+  <details><summary>Что предложено</summary>
+  <p class="why">Общая функция <code>save_profile_search</code> перерисовывает до пяти запомненных сообщений после фиксации и перехватывает любую неудачу (Telegram, Redis). Для Mini App это превращает ошибку после уже сохранённого поиска в успех.</p>
+  </details>
+</article>
+
+<article class="q" id="q21">
+  <header><span class="qn">21</span><h4>lock_timeout у процесса API</h4><span class="chips"><span class="chip decision">решение</span><span class="chip ops">операция</span></span></header>
+  <p class="ask">Готовы ли поставить <code>lock_timeout</code> (предложено 5 с) в настройки соединения процесса API? Есть ли вызовы API, которые по делу ждут блокировку дольше?</p>
+  <details><summary>Почему это важно</summary>
+  <p class="why">Запрос, ждущий чужую блокировку, занимает единственный синхронный поток процесса, и ждут все вызовы, включая Mini App и вызов с неверным ключом. Замер на PostgreSQL 16.1: вызов без базы ждал больше 8 с; с <code>lock_timeout=1s</code> застрявший падал через секунду, остальные отвечали за полсекунды. Проблема есть и сегодня, правка её не создаёт.</p>
+  </details>
+</article>
+
+<article class="q" id="q22">
+  <header><span class="qn">22</span><h4>Операции вне кода</h4><span class="chips"><span class="chip ops">операция</span><span class="chip fact">факт</span></span></header>
+  <p class="ask">Кто и когда делает: секреты ключей служебных методов в выкладке; правило доступа на сервере; адреса сайта в BotFather; передачу секрета клиента входа? Какие коды языков в таблице production?</p>
+</article>
+
+<h3>Процесс</h3>
+
+<article class="q" id="q23">
+  <header><span class="qn">23</span><h4>Ревью, тесты и выкладка</h4><span class="chips"><span class="chip ops">операция</span></span></header>
+  <p class="ask">В каком порядке удобно ревьюить (PR 2 стоит поверх PR 1, в нём семь своих коммитов)? Будете ли запускать новые тесты (pytest на PostgreSQL, первые в репозитории) в CI be? Кто выкладывает и когда stage?</p>
+</article>
+</section>
+
+<section id="ours">
+<h2>Что поправить у нас до встречи</h2>
+<p class="prose">Найдено при подготовке: design адаптера в монорепозитории (<code>openspec/changes/add-public-site</code>, коммит <code>0242d60</code>) отстаёт от правил читателя в PR 1.</p>
+<ul class="ours prose">
+  <li>В design §5 и задаче 3.6 нет проверки <code>pg_snapshot_xmax</code> на каждой пачке. Без неё восстановление базы be на новый сервер оставит витрину без новых изменений до часовой сверки, а если сверка не найдёт расхождения по хэшам старых объектов, то и дольше.</li>
+  <li>Там же сравнение с <code>bot_catalogchange_pruned</code> описано как «перед каждым чтением»; правило be точнее: с каждой пачкой, в картине базы самой пачки (опыт 11).</li>
+  <li>Там же устаревшая строка «столбцов <code>market_kind</code>, <code>interior_kind</code> роль не видит»: с 2026-11-13 их выдали.</li>
+  <li>Не расписано, как адаптер превращает изменение справочной строки (жилой комплекс, район, удобство) в пересборку зависимых объектов.</li>
+  <li>Открытый вопрос 4 того же design («как команда be хочет получить служебные методы») закроется ответом на вопрос 14.</li>
+</ul>
+</section>
+
+<section id="sources">
+<h2>Источники</h2>
+<ul class="sources">
+  <li>be, ветка <code>impl/add-dwelling-change-log</code>: <code>openspec/changes/add-dwelling-change-log/proposal.ru.md</code>, <code>design.ru.md</code> (§2-§15, опыты в §13), <code>tasks.ru.md</code>; описание PR 1.</li>
+  <li>be, ветка <code>impl/add-site-client-service-api</code>: <code>openspec/changes/add-site-client-service-api/proposal.ru.md</code>, <code>design.ru.md</code>, <code>tasks.ru.md</code>; описание PR 2.</li>
+  <li>Монорепозиторий <code>lucky-duck-serj/homegeo</code>: <code>openspec/changes/add-public-site/design.md</code> §2-§9, <code>tasks.md</code>; <code>openspec/changes/add-change-feed/design.md</code> §2-§7.</li>
+  <li>Сайт <code>lucky-duck-serj/homegeo-site</code>: <code>openspec/changes/add-vitrina-sync/design.md</code> (ветка <code>claude/impl-vitrina-sync-2372bc</code>), <code>wiki/decisions/2026-11-11-public-site-stack.md</code>.</li>
+</ul>
+</section>
+</main>
+</div>
+</body>
+</html>
